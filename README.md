@@ -31,45 +31,28 @@ RETURNS trigger
 AS
 $$
 BEGIN
-    				
-		CASE TG_OP            
-            WHEN 'INSERT' THEN
-				DELETE FROM good_sum_mart WHERE good_name = (SELECT good_name FROM goods WHERE goods_id = NEW.good_id);
-				INSERT INTO good_sum_mart SELECT G.good_name, sum(G.good_price * S.sales_qty)
-                  FROM goods G INNER JOIN sales S ON S.good_id = G.goods_id 
-				  WHERE G.goods_id = NEW.good_id GROUP BY G.good_name;
-				  
-		    WHEN 'DELETE' THEN
-			    DELETE FROM good_sum_mart WHERE good_name = (SELECT good_name FROM goods WHERE goods_id = OLD.good_id);
-				INSERT INTO good_sum_mart SELECT G.good_name, sum(G.good_price * S.sales_qty)
-                  FROM goods G INNER JOIN sales S ON S.good_id = G.goods_id 
-				  WHERE G.goods_id = OLD.good_id GROUP BY G.good_name;
-				  
-			WHEN 'UPDATE' THEN
-				IF OLD.good_id = NEW.good_id THEN
-					DELETE FROM good_sum_mart WHERE good_name = (SELECT good_name FROM goods WHERE goods_id = OLD.good_id);
-					INSERT INTO good_sum_mart SELECT G.good_name, sum(G.good_price * S.sales_qty)
-					 FROM goods G INNER JOIN sales S ON S.good_id = G.goods_id 
-				     WHERE G.goods_id = NEW.good_id GROUP BY G.good_name;
-				ELSE
-					DELETE FROM good_sum_mart WHERE good_name = (SELECT good_name FROM goods WHERE goods_id = OLD.good_id);
-					DELETE FROM good_sum_mart WHERE good_name = (SELECT good_name FROM goods WHERE goods_id = NEW.good_id);
-					
-					INSERT INTO good_sum_mart SELECT G.good_name, sum(G.good_price * S.sales_qty)
-					 FROM goods G INNER JOIN sales S ON S.good_id = G.goods_id 
-				     WHERE G.goods_id = NEW.good_id GROUP BY G.good_name;
-					 
-					INSERT INTO good_sum_mart SELECT G.good_name, sum(G.good_price * S.sales_qty)
-					 FROM goods G INNER JOIN sales S ON S.good_id = G.goods_id 
-				     WHERE G.goods_id = OLD.good_id GROUP BY G.good_name;
-			    END IF;
-        END CASE;
+
+	MERGE INTO good_sum_mart gsm USING (
+		SELECT G.good_name, sum(G.good_price * COALESCE(S.sales_qty,0)) sales
+			FROM goods G LEFT JOIN sales S ON S.good_id = G.goods_id
+		GROUP BY G.good_name
+	) g
+		ON gsm.good_name = g.good_name
+	
+    WHEN NOT MATCHED /*AND COALESCE(sum_sale,0) = 0*/ THEN 
+		INSERT VALUES (good_name, sales)
+		
+    WHEN MATCHED AND sum_sale != g.sales AND g.sales > 0 THEN
+	    UPDATE SET sum_sale = g.sales
+		
+	WHEN MATCHED AND sum_sale != g.sales AND g.sales = 0 THEN
+		DELETE; 
+	
     
     
 	RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
-```
+$$ LANGUAGE plpgsql;```
 * Дописал триггер на случай TRUNCATE sales
 ```
 CREATE TRIGGER sales_after_truncate_trg
