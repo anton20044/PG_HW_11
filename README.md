@@ -39,7 +39,7 @@ BEGIN
 	) g
 		ON gsm.good_name = g.good_name
 	
-    WHEN NOT MATCHED /*AND COALESCE(sum_sale,0) = 0*/ THEN 
+    WHEN NOT MATCHED THEN 
 		INSERT VALUES (good_name, sales)
 		
     WHEN MATCHED AND sum_sale != g.sales AND g.sales > 0 THEN
